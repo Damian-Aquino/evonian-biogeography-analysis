@@ -1,0 +1,468 @@
+basin_labels = c("AP", "CN", "PI", "DE", "CZ", "NV", "VC", "MD", "AU", "BO", "ZA", "BR", "AM")
+
+###########################################################################################################
+#RAREFACCIÓN POR MUESTRAS PARA DIVERSIDAD GAMMA
+
+ncol=c(length(unique(d_pbdb_AP$collection_no)), length(unique(d_pbdb_CN$collection_no)), length(unique(d_pbdb_PI$collection_no)),
+       length(unique(d_pbdb_DE$collection_no)), length(unique(d_pbdb_CZ$collection_no)), length(unique(d_pbdb_NV$collection_no)),
+       length(unique(d_pbdb_VC$collection_no)), length(unique(d_pbdb_MD$collection_no)), length(unique(d_pbdb_AU$collection_no)),
+       length(unique(d_pbdb_BO$collection_no)), length(unique(d_pbdb_ZA$collection_no)), length(unique(d_pbdb_BR$collection_no)),
+       length(unique(d_pbdb_AM$collection_no)))
+names(ncol) = basin_labels
+
+d_pbdb_list = list(d_pbdb_AP, d_pbdb_CN, d_pbdb_PI, d_pbdb_DE, d_pbdb_CZ, d_pbdb_NV, d_pbdb_VC, d_pbdb_MD, d_pbdb_AU, d_pbdb_BO,
+                   d_pbdb_ZA, d_pbdb_BR, d_pbdb_AM) 
+
+S_basin_resamp = NULL
+
+#acá seteo cuantas colecciones se remuestrean
+nsamp = min(ncol) - 3 #esto es una cuota de 8
+reach_quota = which(ncol >= nsamp)
+
+#este es el loop de remuestreo
+for (j in 1:1000) {
+    datos_pbdb_temp =NULL
+    for (i in 1:sum(ncol>=nsamp)) {
+        datos_pbdb_temp = rbind(datos_pbdb_temp, d_pbdb_list[[reach_quota[i]]][which(d_pbdb_list[[reach_quota[i]]]$collection_no %in% sample(unique(d_pbdb_list[[reach_quota[i]]]$collection_no), nsamp)),])
+    }
+
+    mat_basin_temp = matricear.region(datos_pbdb_temp, "basin")
+    
+    S_basin_temp = rowSums(mat_basin_temp)
+    S_basin_resamp = rbind(S_basin_resamp, cbind(i, names(reach_quota), S_basin_temp))
+    }
+    
+S_basin_resamp = data.frame(S_basin_resamp)
+colnames(S_basin_resamp) = c("j", "basin", "S")
+S_basin_resamp$S = as.numeric(S_basin_resamp$S)
+
+#calculo las medias e intervalos de confianza para cada cuenca
+
+
+S_basin_mean = aggregate(S_basin_resamp$S, by=list(S_basin_resamp$basin), FUN=mean, na.rm=TRUE)
+S_basin_ci = aggregate(S_basin_resamp$S, by=list(S_basin_resamp$basin), FUN=quantile, probs=c(0.025,0.975), na.rm=TRUE)
+
+S_basin_stand = cbind(S_basin_mean, S_basin_ci[,2])
+colnames(S_basin_stand) = c("basin", "S", "lo_S", "hi_S")
+S_basin_stand = S_basin_stand[c(1,4,10,6,5,8,11,7,9,2,12,3,13),]
+#S_basin_stand = S_basin_stand[c(1,4,9,6,5,8,10,7,2,3),] #esto es para una quota de 2#------
+    
+##################################################################################
+#EXTRAPOLACIÓN DE DIVERSIDAD USANDO cJ1 DE ALROY (2020)
+
+#Cj1 para géneros-------------------------------------------------------------------
+S_realm_Gen_cj1 = NULL
+S_region_Gen_cj1 = NULL
+S_basin_Gen_cj1=NULL
+??count
+
+#por realm
+for (j in 1:1000) { #loop del boostrap
+for (i in 1: length(unique(datos_pbdb$realm))) {
+    n <- count(datos_pbdb$genus[datos_pbdb$realm==unique(datos_pbdb$realm)[i]])$freq
+    n <- sample(n, replace=T) #bootstrap de familias
+    S_realm_Gen_cj1 <- rbind (S_realm_Gen_cj1, cbind(j, unique(datos_pbdb$realm)[i], cJ1(n)))
+    }
+}
+
+S_realm_Gen_cj1 <- data.frame(S_realm_Gen_cj1)
+colnames(S_realm_Gen_cj1) = c("j", "realm", "S")
+S_realm_Gen_cj1$S = as.numeric(S_realm_Gen_cj1$S)
+
+S_realm_Gen_cj1_mean = aggregate(S_realm_Gen_cj1$S, by=list(S_realm_Gen_cj1$realm), FUN=mean, na.rm=T)
+S_realm_Gen_cj1_ci = aggregate(S_realm_Gen_cj1$S, by=list(S_realm_Gen_cj1$realm), FUN=quantile, probs=c(0.025, 0.975), na.rm=T)
+
+S_realm_Gen_cj1 = cbind(S_realm_Gen_cj1_mean, S_realm_Gen_cj1_ci[,2])
+colnames(S_realm_Gen_cj1) = c("realm", "S", "lo_S", "hi_S")
+S_realm_Gen_cj1 = S_realm_Gen_cj1[c(1,3,2),]
+
+#por region
+for (j in 1:1000) {#loop del boostrap
+for (i in 1: length(unique(datos_pbdb$region))) {
+    n <- count(datos_pbdb$genus[datos_pbdb$region==unique(datos_pbdb$region)[i]])$freq
+    n <- sample(n, replace=T) #bootstrap de familias
+    S_region_Gen_cj1 <- rbind (S_region_Gen_cj1, cbind(j, unique(datos_pbdb$region)[i], cJ1(n)))
+    }
+}
+
+for (j in 1:1000) { # loop del bootstrap
+  for (i in 1:length(unique(datos_pbdb$region))) {
+    
+    # contar géneros por región (CORRECTO)
+    n <- as.numeric(table(datos_pbdb$genus[datos_pbdb$region == unique(datos_pbdb$region)[i]]))
+    
+    # bootstrap
+    n <- sample(n, replace = TRUE)
+    
+    # guardar salida
+    S_region_Gen_cj1 <- rbind(
+      S_region_Gen_cj1,
+      cbind(j, unique(datos_pbdb$region)[i], cJ1(n))
+    )
+  }
+}
+
+
+S_region_Gen_cj1 <- data.frame(S_region_Gen_cj1)
+colnames(S_region_Gen_cj1) = c("j", "region", "S")
+S_region_Gen_cj1$S = as.numeric(S_region_Gen_cj1$S)
+
+S_region_Gen_cj1_mean = aggregate(S_region_Gen_cj1$S, by=list(S_region_Gen_cj1$region), FUN=mean, na.rm=T)
+S_region_Gen_cj1_ci = aggregate(S_region_Gen_cj1$S, by=list(S_region_Gen_cj1$region), FUN=quantile, probs=c(0.025, 0.975), na.rm=T)
+
+S_region_Gen_cj1 = cbind(S_region_Gen_cj1_mean, S_region_Gen_cj1_ci[,2])
+colnames(S_region_Gen_cj1) = c("region", "S", "lo_S", "hi_S")
+median_lat_temp = cbind(names(median_lat_region), data.frame(median_lat_region), data.frame(quantile_lat_region))
+colnames(median_lat_temp) = c("region", "median_lat", "lo_lat", "hi_lat")
+S_region_Gen_cj1 = merge(x=S_region_Gen_cj1, y=median_lat_temp, by="region")
+
+library(plyr)
+
+#por cuenca
+for (j in 1:1000) { #loop del boostrap
+for (i in 1: length(unique(datos_pbdb$basin))) {
+    n <- count(datos_pbdb$genus[datos_pbdb$basin==unique(datos_pbdb$basin)[i]])$freq
+    n <- sample(n, replace=T) #bootstrap de familias
+    S_basin_Gen_cj1 <- rbind (S_basin_Gen_cj1, cbind(j, unique(datos_pbdb$basin)[i], cJ1(n)))
+    }
+    }
+S_basin_Gen_cj1 <- data.frame(S_basin_Gen_cj1)
+colnames(S_basin_Gen_cj1) = c("j", "basin", "S")
+S_basin_Gen_cj1$S = as.numeric(S_basin_Gen_cj1$S)
+
+S_basin_Gen_cj1_mean = aggregate(S_basin_Gen_cj1$S, by=list(S_basin_Gen_cj1$basin), FUN=mean, na.rm=T)
+S_basin_Gen_cj1_ci = aggregate(S_basin_Gen_cj1$S, by=list(S_basin_Gen_cj1$basin), FUN=quantile, probs=c(0.025, 0.975), na.rm=T)
+
+S_basin_Gen_cj1 = cbind(S_basin_Gen_cj1_mean, S_basin_Gen_cj1_ci[,2])
+colnames(S_basin_Gen_cj1) = c("basin", "S", "lo_S", "hi_S")
+median_lat_temp = cbind(names(median_lat_basin), data.frame(median_lat_basin), data.frame(quantile_lat_basin))
+colnames(median_lat_temp) = c("basin", "median_lat", "lo_lat", "hi_lat")
+S_basin_Gen_cj1 = merge(x=S_basin_Gen_cj1, y=median_lat_temp, by="basin")
+
+#Cj1 familias----------------------------------------------------------------------------------------
+datos_familia = unique(datos_pbdb[,c("collection_no", "family", "realm", "region", "basin")])
+
+S_realm_Fam_cj1 = NULL
+S_region_Fam_cj1 = NULL
+S_basin_Fam_cj1=NULL
+
+#por realm
+for (j in 1:1000) { #loop del boostrap
+for (i in 1: length(unique(datos_familia$realm))) {
+    n <- count(datos_familia$family[datos_familia$realm==unique(datos_familia$realm)[i]])$freq
+    n <- sample(n, replace=T) #bootstrap de familias
+    S_realm_Fam_cj1 <- rbind (S_realm_Fam_cj1, cbind(j, unique(datos_familia$realm)[i], cJ1(n)))
+    }
+    }
+S_realm_Fam_cj1 <- data.frame(S_realm_Fam_cj1)
+colnames(S_realm_Fam_cj1) = c("j", "realm", "S")
+S_realm_Fam_cj1$S = as.numeric(S_realm_Fam_cj1$S)
+
+S_realm_Fam_cj1_mean = aggregate(S_realm_Fam_cj1$S, by=list(S_realm_Fam_cj1$realm), FUN=mean, na.rm=T)
+S_realm_Fam_cj1_ci = aggregate(S_realm_Fam_cj1$S, by=list(S_realm_Fam_cj1$realm), FUN=quantile, probs=c(0.025, 0.975), na.rm=T)
+
+S_realm_Fam_cj1 = cbind(S_realm_Fam_cj1_mean, S_realm_Fam_cj1_ci[,2])
+colnames(S_realm_Fam_cj1) = c("realm", "S", "lo_S", "hi_S")
+S_realm_Fam_cj1 = S_realm_Fam_cj1[c(1,3,2),]
+
+#por region
+for (j in 1:1000) {#loop del boostrap
+for (i in 1: length(unique(datos_familia$region))) {
+    n <- count(datos_familia$family[datos_familia$region==unique(datos_familia$region)[i]])$freq
+    n <- sample(n, replace=T) #bootstrap de familias
+    S_region_Fam_cj1 <- rbind (S_region_Fam_cj1, cbind(j, unique(datos_familia$region)[i], cJ1(n)))
+    }
+    }
+S_region_Fam_cj1 <- data.frame(S_region_Fam_cj1)
+colnames(S_region_Fam_cj1) = c("j", "region", "S")
+S_region_Fam_cj1$S = as.numeric(S_region_Fam_cj1$S)
+
+S_region_Fam_cj1_mean = aggregate(S_region_Fam_cj1$S, by=list(S_region_Fam_cj1$region), FUN=mean, na.rm=T)
+S_region_Fam_cj1_ci = aggregate(S_region_Fam_cj1$S, by=list(S_region_Fam_cj1$region), FUN=quantile, probs=c(0.025, 0.975), na.rm=T)
+
+S_region_Fam_cj1 = cbind(S_region_Fam_cj1_mean, S_region_Fam_cj1_ci[,2])
+colnames(S_region_Fam_cj1) = c("region", "S", "lo_S", "hi_S")
+median_lat_temp = cbind(names(median_lat_region), data.frame(median_lat_region), data.frame(quantile_lat_region))
+colnames(median_lat_temp) = c("region", "median_lat", "lo_lat", "hi_lat")
+S_region_Fam_cj1 = merge(x=S_region_Fam_cj1, y=median_lat_temp, by="region")
+
+#por cuenca
+for (j in 1:1000) { #loop del boostrap
+for (i in 1: length(unique(datos_familia$basin))) {
+    n <- count(datos_familia$family[datos_familia$basin==unique(datos_familia$basin)[i]])$freq
+    n <- sample(n, replace=T) #bootstrap de familias
+    S_basin_Fam_cj1 <- rbind (S_basin_Fam_cj1, cbind(j, unique(datos_familia$basin)[i], cJ1(n)))
+    }
+    }
+S_basin_Fam_cj1 <- data.frame(S_basin_Fam_cj1)
+colnames(S_basin_Fam_cj1) = c("j", "basin", "S")
+S_basin_Fam_cj1$S = as.numeric(S_basin_Fam_cj1$S)
+
+S_basin_Fam_cj1_mean = aggregate(S_basin_Fam_cj1$S, by=list(S_basin_Fam_cj1$basin), FUN=mean, na.rm=T)
+S_basin_Fam_cj1_ci = aggregate(S_basin_Fam_cj1$S, by=list(S_basin_Fam_cj1$basin), FUN=quantile, probs=c(0.025, 0.975), na.rm=T)
+
+S_basin_Fam_cj1 = cbind(S_basin_Fam_cj1_mean, S_basin_Fam_cj1_ci[,2])
+colnames(S_basin_Fam_cj1) = c("basin", "S", "lo_S", "hi_S")
+median_lat_temp = cbind(names(median_lat_basin), data.frame(median_lat_basin), data.frame(quantile_lat_basin))
+colnames(median_lat_temp) = c("basin", "median_lat", "lo_lat", "hi_lat")
+S_basin_Fam_cj1 = merge(x=S_basin_Fam_cj1, y=median_lat_temp, by="basin")
+
+############################################################################################################################################
+#PLOT DE PUNTOS Y BIGOTES PARA LA DIVERSIDAD GAMMA (GENEROS) SEGUN ESCALA Y LATITUD
+par(bg="gray95")
+layout(matrix(c(1:4), ncol=2, byrow=T))
+
+# Paleta de colores 
+colores_realm <- c("#EE3B3B", "gray42", "#548B54")
+colores_basin <- c("#EE3B3B","#EE3B3B","gray42","#548B54","#548B54",
+                   "gray42","gray42","gray42","gray42",
+                   "#EE3B3B","gray42","#EE3B3B","#548B54")
+
+#------------------------------
+# POR REALM (generos)
+plot(median_lat_realm, S_realm_Gen_cj1$S,
+     ylim=c(0, max(S_realm_Gen_cj1$hi_S)), xlim=c(-90, 0),
+     pch=21, cex=2, bg=colores_realm, col="black",
+     xlab="Paleolatitude", ylab="Richness (S = genera) [cJ1]",
+     main="Realms", cex.lab=1.6, cex.axis=1.3, cex.main=2)
+for (i in 1:nrow(quantile_lat_realm)) {
+  segments(x0=quantile_lat_realm[i,1], x1=quantile_lat_realm[i,2],
+           y0=S_realm_Gen_cj1$S[i], y1=S_realm_Gen_cj1$S[i], col="gray40") 
+  segments(x0=median_lat_realm[i], x1=median_lat_realm[i],
+           y0=S_realm_Gen_cj1$lo_S[i], y1=S_realm_Gen_cj1$hi_S[i], col="gray40") 
+}
+text(x=median_lat_realm, y=S_realm_Gen_cj1$S, labels=realm_labels, pos=3, cex=1.2 , font=2)
+mtext("A", side=3, line=1, cex=2, at=-91)
+
+#------------------------------
+# --- BASINS (generos) ---
+plot(S_basin_Gen_cj1$median_lat, S_basin_Gen_cj1$S,
+     ylim=c(0, max(S_basin_Gen_cj1$hi_S)), xlim=c(-90, 0),
+     pch=21, cex=1.8, bg=colores_basin, col="black",
+     xlab="Paleolatitude", ylab="Richness (S = genera) [cJ1]",
+     main="Basins", cex.lab=1.6, cex.axis=1.3, cex.main=2)
+for (i in 1:nrow(quantile_lat_basin)) {
+  segments(x0=S_basin_Gen_cj1$lo_lat[i], x1=S_basin_Gen_cj1$hi_lat[i],
+           y0=S_basin_Gen_cj1$S[i], y1=S_basin_Gen_cj1$S[i], col="gray40") 
+  segments(x0=S_basin_Gen_cj1$median_lat[i], x1=S_basin_Gen_cj1$median_lat[i],
+           y0=S_basin_Gen_cj1$lo_S[i], y1=S_basin_Gen_cj1$hi_S[i], col="gray40") 
+}
+text(S_basin_Gen_cj1$median_lat, 
+     S_basin_Gen_cj1$S + ifelse(seq_len(nrow(S_basin_Gen_cj1)) %% 2 == 0, 0.8, -0.8),
+     labels=S_basin_Gen_cj1$basin, 
+     pos=ifelse(seq_len(nrow(S_basin_Gen_cj1)) %% 2 == 0, 3, 1),
+     font=2)
+
+#------------------------------
+# POR REALM (familias)
+plot(median_lat_realm, S_realm_Fam_cj1$S,
+     ylim=c(0, max(S_realm_Fam_cj1$hi_S)), xlim=c(-90, 0),
+     pch=21, cex=2, bg=colores_realm, col="black",
+     xlab="Paleolatitude", ylab="Richness (S = family) [cJ1]",
+     main="Realms", cex.lab=1.6, cex.axis=1.3, cex.main=2)
+for (i in 1:nrow(quantile_lat_realm)) {
+  segments(x0=quantile_lat_realm[i,1], x1=quantile_lat_realm[i,2],
+           y0=S_realm_Fam_cj1$S[i], y1=S_realm_Fam_cj1$S[i], col="gray40") 
+  segments(x0=median_lat_realm[i], x1=median_lat_realm[i],
+           y0=S_realm_Fam_cj1$lo_S[i], y1=S_realm_Fam_cj1$hi_S[i], col="gray40") 
+}
+text(x=median_lat_realm, y=S_realm_Fam_cj1$S, labels=realm_labels, pos=3, cex=1.2 , font=2)
+mtext("C", side=3, line=1, cex=2, at=-91)
+
+#------------------------------
+# POR BASIN (familias)
+plot(S_basin_Fam_cj1$median_lat, S_basin_Fam_cj1$S,
+     ylim=c(0, max(S_basin_Fam_cj1$hi_S)), xlim=c(-90, 0),
+     pch=21, cex=1.8, bg=colores_basin, col="black",
+     xlab="Paleolatitude", ylab="Richness (S = family) [cJ1]",
+     main="Basins", cex.lab=1.6, cex.axis=1.3, cex.main=2)
+for (i in 1:nrow(quantile_lat_basin)) {
+  segments(x0=S_basin_Fam_cj1$lo_lat[i], x1=S_basin_Fam_cj1$hi_lat[i],
+           y0=S_basin_Fam_cj1$S[i], y1=S_basin_Fam_cj1$S[i], col="gray40") 
+  segments(x0=S_basin_Fam_cj1$median_lat[i], x1=S_basin_Fam_cj1$median_lat[i],
+           y0=S_basin_Fam_cj1$lo_S[i], y1=S_basin_Fam_cj1$hi_S[i], col="gray40") 
+}
+text(x=S_basin_Fam_cj1$median_lat, y=S_basin_Fam_cj1$S,
+     labels=S_basin_Fam_cj1$basin, pos=3, offset=0.6, cex=0.9, font= 2)
+mtext("D", side=3, line=1, cex=2, at=-91)
+
+#-------------------------------------
+# CONFIG GENERAL
+#-------------------------------------
+par(bg="gray95")                     # Fondo gris suave
+layout(matrix(1:4, ncol=2, byrow=TRUE))
+par(mar=c(5,5,4,2))
+
+# Colores
+col_realm  <- c("#EE3B3B", "gray42", "#548B54")
+col_basin  <- c("#EE3B3B","#EE3B3B","gray42","#548B54","#548B54",
+                "gray42","gray42","gray42","gray42",
+                "#EE3B3B","gray42","#EE3B3B","#548B54")
+
+#-------------------------------------
+# A — REALMS (géneros)
+#-------------------------------------
+plot(median_lat_realm, S_realm_Gen_cj1$S,
+     ylim=c(0, max(S_realm_Gen_cj1$hi_S)), xlim=c(-90, 0),
+     pch=21, cex=2, bg=col_realm, col="black",
+     xlab="Paleolatitude", ylab="Richness (S = genera) [cJ1]",
+     main="Realms", cex.lab=1.6, cex.axis=1.3, cex.main=2)
+
+segments(median_lat_realm, S_realm_Gen_cj1$lo_S,
+         median_lat_realm, S_realm_Gen_cj1$hi_S, col="gray40")
+
+text(median_lat_realm, S_realm_Gen_cj1$S, labels=realm_labels, pos=3, cex=1.2, font=2)
+mtext("A", side=3, line=1, cex=2, at=-91)
+
+#-------------------------------------
+# B — BASINS (géneros)
+#-------------------------------------
+plot(S_basin_Gen_cj1$median_lat, S_basin_Gen_cj1$S,
+     ylim=c(0, max(S_basin_Gen_cj1$hi_S)), xlim=c(-90, 0),
+     pch=21, cex=1.8, bg=col_basin, col="black",
+     xlab="Paleolatitude", ylab="Richness (S = genera) [cJ1]",
+     main="Basins", cex.lab=1.6, cex.axis=1.3, cex.main=2)
+
+segments(S_basin_Gen_cj1$lo_lat, S_basin_Gen_cj1$S,
+         S_basin_Gen_cj1$hi_lat, S_basin_Gen_cj1$S,
+         col="gray40")
+
+segments(S_basin_Gen_cj1$median_lat, S_basin_Gen_cj1$lo_S,
+         S_basin_Gen_cj1$median_lat, S_basin_Gen_cj1$hi_S,
+         col="gray40")
+
+text(S_basin_Gen_cj1$median_lat,
+     S_basin_Gen_cj1$S + ifelse(seq_len(nrow(S_basin_Gen_cj1)) %% 2 == 0, 0.8, -0.8),
+     labels=S_basin_Gen_cj1$basin,
+     pos=ifelse(seq_len(nrow(S_basin_Gen_cj1)) %% 2 == 0, 3, 1),
+     font=2)
+
+mtext("B", side=3, line=1, cex=2, at=-91)
+
+#-------------------------------------
+# C — REALMS (familias)
+#-------------------------------------
+plot(median_lat_realm, S_realm_Fam_cj1$S,
+     ylim=c(0, max(S_realm_Fam_cj1$hi_S)), xlim=c(-90, 0),
+     pch=21, cex=2, bg=col_realm, col="black",
+     xlab="Paleolatitude", ylab="Richness (S = family) [cJ1]",
+     main="Realms", cex.lab=1.6, cex.axis=1.3, cex.main=2)
+
+segments(median_lat_realm, S_realm_Fam_cj1$lo_S,
+         median_lat_realm, S_realm_Fam_cj1$hi_S, col="gray40")
+
+text(median_lat_realm, S_realm_Fam_cj1$S, labels=realm_labels, pos=3, cex=1.2, font=2)
+mtext("C", side=3, line=1, cex=2, at=-91)
+
+#-------------------------------------
+# D — BASINS (familias)
+#-------------------------------------
+plot(S_basin_Fam_cj1$median_lat, S_basin_Fam_cj1$S,
+     ylim=c(0, max(S_basin_Fam_cj1$hi_S)), xlim=c(-90, 0),
+     pch=21, cex=1.8, bg=col_basin, col="black",
+     xlab="Paleolatitude", ylab="Richness (S = family) [cJ1]",
+     main="Basins", cex.lab=1.6, cex.axis=1.3, cex.main=2)
+
+segments(S_basin_Fam_cj1$lo_lat, S_basin_Fam_cj1$S,
+         S_basin_Fam_cj1$hi_lat, S_basin_Fam_cj1$S, col="gray40")
+
+segments(S_basin_Fam_cj1$median_lat, S_basin_Fam_cj1$lo_S,
+         S_basin_Fam_cj1$median_lat, S_basin_Fam_cj1$hi_S, col="gray40")
+
+text(S_basin_Fam_cj1$median_lat, S_basin_Fam_cj1$S,
+     labels=S_basin_Fam_cj1$basin, pos=3, offset=0.6, cex=0.9, font=2)
+mtext("D", side=3, line=1, cex=2, at=-91)
+
+
+#-------------------------------------------------------------
+ alpha diversity vs latitud
+#-------------------------------------------------------------
+basin_labels <- c("AP", "CN", "PI", "DE", "CZ", "NV", "VC", "MD", "AU", "BO", "ZA", "BR", "AM")
+
+colores_borde <- c(3,2,2,2,2,3,3,2,2,1,1,1,3)
+colores_relleno <- adjustcolor("lightblue", alpha.f = 0.5)  # semitransparente
+
+plot(NA, NA, 
+     ylim=c(0, max(rowSums(mat_AP), rowSums(mat_CN), rowSums(mat_PI),
+                   rowSums(mat_DE), rowSums(mat_CZ), rowSums(mat_NV),
+                   rowSums(mat_VC), rowSums(mat_MD), rowSums(mat_AU),
+                   rowSums(mat_BO), rowSums(mat_ZA), rowSums(mat_BR),
+                   rowSums(mat_AM), na.rm=TRUE)+5), 
+     xlim=c(-90,0), 
+     xlab="Paleolatitude (°)", 
+     ylab="Alpha Richness", 
+     main="Alpha Diversity por Cuenca",
+     sub="Distribución de riqueza por cuenca y latitud",
+     cex.lab=1.2, cex.axis=1.1, cex.main=1.4, cex.sub=1.1)
+
+abline(h=seq(0,50,5), col="gray90", lty=2)
+abline(v=seq(-90,0,10), col="gray90", lty=2)
+
+# Boxplots de alpha diversity
+boxplot(rowSums(mat_AP)[rowSums(mat_AP)>1], 
+        rowSums(mat_CN)[rowSums(mat_CN)>1], 
+        rowSums(mat_PI)[rowSums(mat_PI)>1], 
+        rowSums(mat_DE)[rowSums(mat_DE)>1], 
+        rowSums(mat_CZ)[rowSums(mat_CZ)>1], 
+        rowSums(mat_NV)[rowSums(mat_NV)>1],
+        rowSums(mat_VC)[rowSums(mat_VC)>1], 
+        rowSums(mat_MD)[rowSums(mat_MD)>1],
+        rowSums(mat_AU)[rowSums(mat_AU)>1],
+        rowSums(mat_BO)[rowSums(mat_BO)>1], 
+        rowSums(mat_ZA)[rowSums(mat_ZA)>1], 
+        rowSums(mat_BR)[rowSums(mat_BR)>1],
+        rowSums(mat_AM)[rowSums(mat_AM)>1],
+        border=colores_borde,
+        col=colores_relleno,
+        at=median_lat_basin, 
+        add=TRUE, 
+        names=rep("", 13),
+        notch=TRUE)  # Notch indica mediana ± 95% CI
+
+# Etiquetas de cuenca
+text(x=median_lat_basin, y=-2, labels=basin_labels, srt=45, adj=1, cex=0.9)
+
+
+mats <- list(mat_AP, mat_CN, mat_PI, mat_DE, mat_CZ, mat_NV,
+             mat_VC, mat_MD, mat_AU, mat_BO, mat_ZA, mat_BR, mat_AM)
+
+# Calcular riqueza (>1)
+rich_list <- lapply(mats, function(x) rowSums(x)[rowSums(x) > 1])
+
+# Ordenar por paleolatitud
+ord <- order(median_lat)
+median_lat <- median_lat[ord]
+rich_list <- rich_list[ord]
+basin_labels <- basin_labels[ord]
+
+# Definir reinos
+realm <- ifelse(basin_labels %in% c("BR","ZA","BO"), "Malvinoxhosan",
+                ifelse(basin_labels %in% c("AM","VC", "AP" , "NV"),
+                       "EasternAmericas" , "OldWorld"))
+
+cols <- c(Malvinoxhosan="darkgreen",
+          OldWorld="black",
+          EasternAmericas="#EE3B3B")[realm]
+
+par(bg="gray95", mar=c(4.5,5,3,2), las=1, bty="o",
+    col.axis="gray20", col.lab="gray10", tck=-0.015)
+
+plot(NA, xlim=c(-90,0), ylim=c(0,50),
+     xlab="Paleolatitude (°)", ylab="Alpha richness")
+
+grid(col="white")
+
+boxplot(rich_list, at=median_lat,
+        add=TRUE, names=rep("", length(rich_list)),
+        border=cols,
+        col=adjustcolor(cols, alpha.f=0.35),
+        outline=FALSE)
+
+# Etiquetas al costado (posición mediana)
+text(median_lat , sapply(rich_list, median),
+     labels=basin_labels, col=cols, cex=0.8, pos=4)
+
+legend("topright",
+       legend=c("Malvinoxhosan","Old World","Eastern Americas"),
+       col=c("darkgreen","black","#EE3B3B"),
+       pch=15, bty="n")

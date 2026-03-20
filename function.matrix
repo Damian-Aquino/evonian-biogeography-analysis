@@ -1,0 +1,48 @@
+matricear=function(datos) {
+
+    matriz_d = NULL
+    generos = unique(datos$genus)
+    muestras = unique(datos$collection_no)
+
+    for (i in 1:length(muestras)) {
+        temp = generos %in% as.vector(as.matrix(datos[datos$collection_no==muestras[i],"genus"]))
+        temp = as.numeric(temp)
+        matriz_d = rbind(matriz_d, temp)
+    }
+    
+    colnames(matriz_d) = generos
+    rownames(matriz_d) = muestras
+
+    return(matriz_d)
+}
+
+#####################################################################################################################
+#formula singletons solo elimina MUESTRAS MONOESPECIFICAS
+singleton = function(datos) {
+datos.small = datos
+datos.small = datos.small[rowSums(datos.small>0)>1,] #eliminates the samples with only one species
+datos.small = datos.small[,colSums(datos.small)>0]
+return (datos.small)
+}
+
+#####################################################################################################################
+matricear.region=function(datos, escala) {
+
+    datos=data.frame(datos)
+    matriz_d = NULL
+    escalas = colnames(datos)==escala
+    generos = unique(datos$genus)
+    regiones = unique(datos[,escalas])
+
+    for (i in 1:length(regiones)) {
+        temp = generos %in% as.vector(as.matrix(datos[datos[,escalas]==regiones[i],"genus"]))
+        temp = as.numeric(temp)
+        matriz_d = rbind(matriz_d, temp)
+    }
+    
+    colnames(matriz_d) = generos
+    rownames(matriz_d) = regiones
+
+    return(matriz_d)
+}
+
